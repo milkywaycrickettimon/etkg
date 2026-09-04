@@ -106,15 +106,7 @@ jobs:
           EMAIL_FILE="$GITHUB_WORKSPACE/email-body.txt"
 
           {
-            echo "Hello,"
-            echo
-            echo "The ESET Account and Key Generator has completed."
-            echo
-            echo "Repository: ${{ github.repository }}"
-            echo "Workflow: ${{ github.workflow }}"
-            echo "Run: #${{ github.run_number }}"
-            echo "Operating System: ${{ github.event.inputs.os }}"
-            echo
+            echo "Witam witam,"
             echo "=================================================="
             echo "GENERATED OUTPUT"
             echo "=================================================="
