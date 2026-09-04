@@ -98,6 +98,31 @@ jobs:
 
 
       # =========================================================
+      # PREPARE EMAIL BODY
+      # =========================================================
+      - name: Prepare Email Body
+        shell: bash
+        run: |
+          EMAIL_FILE="$GITHUB_WORKSPACE/email-body.txt"
+
+          {
+            echo "Hello,"
+            echo
+            echo "The ESET Account and Key Generator has completed."
+            echo
+            echo "Repository: ${{ github.repository }}"
+            echo "Workflow: ${{ github.workflow }}"
+            echo "Run: #${{ github.run_number }}"
+            echo "Operating System: ${{ github.event.inputs.os }}"
+            echo
+            echo "=================================================="
+            echo "GENERATED OUTPUT"
+            echo "=================================================="
+            echo
+          } > "$EMAIL_FILE"
+
+
+      # =========================================================
       # CLONE ETKG REPOSITORY
       # =========================================================
       - name: Clone Repository
@@ -123,6 +148,7 @@ jobs:
 
           python3 -m venv venv
           source venv/bin/activate
+
           pip install -r requirements.txt
 
           ACCOUNT="${{ steps.vars.outputs.account }}"
@@ -131,23 +157,6 @@ jobs:
           KEY_TYPE="${{ steps.vars.outputs.key_type }}"
 
           EMAIL_FILE="$GITHUB_WORKSPACE/email-body.txt"
-
-          # Create email header
-          {
-            echo "Hello,"
-            echo
-            echo "The ESET Account and Key Generator has completed."
-            echo
-            echo "Repository: ${{ github.repository }}"
-            echo "Workflow: ${{ github.workflow }}"
-            echo "Run: #${{ github.run_number }}"
-            echo "Operating System: $RUNNER_OS"
-            echo
-            echo "=================================================="
-            echo "GENERATED OUTPUT"
-            echo "=================================================="
-            echo
-          } > "$EMAIL_FILE"
 
           # Generate accounts
           if [[ "$ACCOUNT" != "0" ]]; then
@@ -218,27 +227,11 @@ jobs:
           $MAIL = "${{ steps.vars.outputs.mail }}"
           $KEY_TYPE = "${{ steps.vars.outputs.key_type }}"
 
-          # Create email body file
           $EMAIL_FILE = Join-Path $env:GITHUB_WORKSPACE "email-body.txt"
-
-          @"
-Hello,
-
-The ESET Account and Key Generator has completed.
-
-Repository: ${{ github.repository }}
-Workflow: ${{ github.workflow }}
-Run: #${{ github.run_number }}
-Operating System: $env:RUNNER_OS
-
-==================================================
-GENERATED OUTPUT
-==================================================
-
-"@ | Out-File -FilePath $EMAIL_FILE -Encoding utf8
 
           # Generate accounts
           if ($ACCOUNT -ne 0) {
+
             python main.py `
               --auto-detect-browser `
               --account `
@@ -249,26 +242,22 @@ GENERATED OUTPUT
               --disable-logging `
               --repeat $ACCOUNT
 
-            "Account:" | Out-File `
-              -FilePath $EMAIL_FILE `
-              -Append `
-              -Encoding utf8
+            Add-Content -Path $EMAIL_FILE -Value "Account:"
 
-            Get-Content -Path ./*ACCOUNTS.txt `
-              -ErrorAction SilentlyContinue |
-              Out-File `
-                -FilePath $EMAIL_FILE `
-                -Append `
-                -Encoding utf8
+            if (Test-Path ./*ACCOUNTS.txt) {
+              Get-Content ./*ACCOUNTS.txt |
+                Add-Content -Path $EMAIL_FILE
+            }
+            else {
+              Add-Content -Path $EMAIL_FILE -Value "None"
+            }
 
-            "" | Out-File `
-              -FilePath $EMAIL_FILE `
-              -Append `
-              -Encoding utf8
+            Add-Content -Path $EMAIL_FILE -Value ""
           }
 
           # Generate keys
           if ($KEY -ne 0) {
+
             python main.py `
               --auto-detect-browser `
               "$KEY_TYPE" `
@@ -279,36 +268,26 @@ GENERATED OUTPUT
               --disable-logging `
               --repeat $KEY
 
-            "Key:" | Out-File `
-              -FilePath $EMAIL_FILE `
-              -Append `
-              -Encoding utf8
+            Add-Content -Path $EMAIL_FILE -Value "Key:"
 
-            Get-Content -Path ./*KEYS.txt `
-              -ErrorAction SilentlyContinue |
-              Out-File `
-                -FilePath $EMAIL_FILE `
-                -Append `
-                -Encoding utf8
+            if (Test-Path ./*KEYS.txt) {
+              Get-Content ./*KEYS.txt |
+                Add-Content -Path $EMAIL_FILE
+            }
+            else {
+              Add-Content -Path $EMAIL_FILE -Value "None"
+            }
 
-            "" | Out-File `
-              -FilePath $EMAIL_FILE `
-              -Append `
-              -Encoding utf8
+            Add-Content -Path $EMAIL_FILE -Value ""
           }
 
           # Footer
-          @"
-==================================================
-
-GitHub Actions run:
-https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-This email was automatically generated by GitHub Actions.
-"@ | Out-File `
-              -FilePath $EMAIL_FILE `
-              -Append `
-              -Encoding utf8
+          Add-Content -Path $EMAIL_FILE -Value "=================================================="
+          Add-Content -Path $EMAIL_FILE -Value ""
+          Add-Content -Path $EMAIL_FILE -Value "GitHub Actions run:"
+          Add-Content -Path $EMAIL_FILE -Value "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          Add-Content -Path $EMAIL_FILE -Value ""
+          Add-Content -Path $EMAIL_FILE -Value "This email was automatically generated by GitHub Actions."
 
 
       # =========================================================
@@ -316,24 +295,18 @@ This email was automatically generated by GitHub Actions.
       # =========================================================
       - name: Send Summary by Email
         if: always()
-        uses: dawidd6/action-send-mail@v6
+        uses: dawidd6/action-send-mail@v18
         with:
-
-          # Gmail SMTP
           server_address: smtp.gmail.com
           server_port: 465
           secure: true
 
-          # GitHub Secrets
           username: ${{ secrets.GMAIL_USERNAME }}
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
 
-          # Email sender and recipient
-          from: GitHub Actions <${{ secrets.GMAIL_USERNAME }}>
+          from: ${{ secrets.GMAIL_USERNAME }}
           to: ${{ secrets.EMAIL_TO }}
 
-          # Email subject
           subject: "ESET KeyGen - Generated Account/Key"
 
-          # Email body comes directly from the temporary file
           body: file://${{ github.workspace }}/email-body.txt
