@@ -64,7 +64,7 @@ on:
 
 jobs:
   generate-account-and-key:
-    runs-on: ${{ steps.vars.outputs.os }}
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.os || 'windows-latest' }}
 
     steps:
 
