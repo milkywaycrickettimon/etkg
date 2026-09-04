@@ -1,8 +1,9 @@
 name: Account and Key Generator
 
 on:
- # schedule: #if need schedule 
- #   - cron: "0 */2 * * *"
+  # schedule: #if need schedule
+  #   - cron: "0 */2 * * *"
+
   workflow_dispatch:
     inputs:
       account:
@@ -10,11 +11,13 @@ on:
         required: false
         default: '0'
         type: string
+
       key:
         description: 'Number of Keys to be generated (default = 1)'
         required: false
         default: '1'
         type: string
+
       mail:
         description: 'Choose the mail provider to generate license'
         required: true
@@ -29,6 +32,7 @@ on:
           - incognitomail
           - emailfake
         default: emailfake
+
       key_type:
         description: 'Modes of operation'
         required: true
@@ -37,6 +41,7 @@ on:
           - --key
           - --small-business-key
         default: --key
+
       os:
         description: 'Operating System of runner (Linux, macOS, Windows)'
         required: true
@@ -46,6 +51,7 @@ on:
           - macos-latest
           - windows-latest
         default: windows-latest
+
       branch:
         description: "Repository branch (don't touch it if you don't know what it is!!!)"
         required: false
@@ -55,39 +61,60 @@ on:
           - test
         default: main
 
+
 jobs:
   generate-account-and-key:
-    runs-on: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.os || 'windows-latest' }} #if fallback then
+
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.os || 'windows-latest' }}
+
     steps:
+
+      # =========================================================
+      # SET VARIABLES
+      # =========================================================
       - name: Set Variables
         id: vars
-        shell: bash 
+        shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "account=${{ github.event.inputs.account }}" >> $GITHUB_OUTPUT
-            echo "key=${{ github.event.inputs.key }}" >> $GITHUB_OUTPUT
-            echo "mail=${{ github.event.inputs.mail }}" >> $GITHUB_OUTPUT
-            echo "key_type=${{ github.event.inputs.key_type }}" >> $GITHUB_OUTPUT
-            echo "branch=${{ github.event.inputs.branch }}" >> $GITHUB_OUTPUT
-          else #if fallback then
-            echo "account=0" >> $GITHUB_OUTPUT
-            echo "key=1" >> $GITHUB_OUTPUT
-            echo "mail=emailfake" >> $GITHUB_OUTPUT
-            echo "key_type=--key" >> $GITHUB_OUTPUT
-            echo "branch=main" >> $GITHUB_OUTPUT
+            echo "account=${{ github.event.inputs.account }}" >> "$GITHUB_OUTPUT"
+            echo "key=${{ github.event.inputs.key }}" >> "$GITHUB_OUTPUT"
+            echo "mail=${{ github.event.inputs.mail }}" >> "$GITHUB_OUTPUT"
+            echo "key_type=${{ github.event.inputs.key_type }}" >> "$GITHUB_OUTPUT"
+            echo "branch=${{ github.event.inputs.branch }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "account=0" >> "$GITHUB_OUTPUT"
+            echo "key=1" >> "$GITHUB_OUTPUT"
+            echo "mail=emailfake" >> "$GITHUB_OUTPUT"
+            echo "key_type=--key" >> "$GITHUB_OUTPUT"
+            echo "branch=main" >> "$GITHUB_OUTPUT"
           fi
 
+
+      # =========================================================
+      # CHECKOUT REPOSITORY
+      # =========================================================
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Clone Repository
-        run: git clone -b "${{ steps.vars.outputs.branch }}" https://github.com/shadowcopyrz/etkg.git
 
+      # =========================================================
+      # CLONE ETKG REPOSITORY
+      # =========================================================
+      - name: Clone Repository
+        run: |
+          git clone -b "${{ steps.vars.outputs.branch }}" https://github.com/shadowcopyrz/etkg.git
+
+
+      # =========================================================
+      # LINUX / MACOS
+      # =========================================================
       - name: Setup & Run Script (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           cd etkg
+
           if [[ "$RUNNER_OS" == "macOS" ]]; then
             brew install python@3.11 || true
           else
@@ -104,23 +131,82 @@ jobs:
           MAIL="${{ steps.vars.outputs.mail }}"
           KEY_TYPE="${{ steps.vars.outputs.key_type }}"
 
+          # Create the email body file
+          EMAIL_FILE="$GITHUB_WORKSPACE/email-body.txt"
+
+          {
+            echo "Hello,"
+            echo
+            echo "The ESET Account and Key Generator has completed."
+            echo
+            echo "Repository: ${{ github.repository }}"
+            echo "Workflow: ${{ github.workflow }}"
+            echo "Run: #${{ github.run_number }}"
+            echo "Operating System: $RUNNER_OS"
+            echo
+            echo "=================================================="
+            echo "GENERATED OUTPUT"
+            echo "=================================================="
+            echo
+          } > "$EMAIL_FILE"
+
           if [[ "$ACCOUNT" != "0" ]]; then
-            python3 main.py --auto-detect-browser --account --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$ACCOUNT"
-            echo "Account:" >> $GITHUB_STEP_SUMMARY
-            cat ./*ACCOUNTS.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "None" >> $GITHUB_STEP_SUMMARY
+            python3 main.py \
+              --auto-detect-browser \
+              --account \
+              --email-api "$MAIL" \
+              --skip-update-check \
+              --no-logo \
+              --disable-progress-bar \
+              --disable-logging \
+              --repeat "$ACCOUNT"
+
+            echo "Account:" >> "$EMAIL_FILE"
+
+            cat ./*ACCOUNTS.txt >> "$EMAIL_FILE" 2>/dev/null || \
+              echo "None" >> "$EMAIL_FILE"
+
+            echo >> "$EMAIL_FILE"
           fi
 
           if [[ "$KEY" != "0" ]]; then
-            python3 main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat "$KEY"
-            echo -e "\nKey:" >> $GITHUB_STEP_SUMMARY
-            cat ./*KEYS.txt >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "None" >> $GITHUB_STEP_SUMMARY
+            python3 main.py \
+              --auto-detect-browser \
+              "$KEY_TYPE" \
+              --email-api "$MAIL" \
+              --skip-update-check \
+              --no-logo \
+              --disable-progress-bar \
+              --disable-logging \
+              --repeat "$KEY"
+
+            echo "Key:" >> "$EMAIL_FILE"
+
+            cat ./*KEYS.txt >> "$EMAIL_FILE" 2>/dev/null || \
+              echo "None" >> "$EMAIL_FILE"
+
+            echo >> "$EMAIL_FILE"
           fi
 
+          {
+            echo "=================================================="
+            echo
+            echo "GitHub Actions run:"
+            echo "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo
+            echo "This email was automatically generated by GitHub Actions."
+          } >> "$EMAIL_FILE"
+
+
+      # =========================================================
+      # WINDOWS
+      # =========================================================
       - name: Setup & Run Script (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           cd etkg
+
           python -m venv venv
           .\venv\Scripts\pip install -r requirements.txt
           .\venv\Scripts\Activate.ps1
@@ -130,14 +216,97 @@ jobs:
           $MAIL = "${{ steps.vars.outputs.mail }}"
           $KEY_TYPE = "${{ steps.vars.outputs.key_type }}"
 
+          # Create the email body file
+          $EMAIL_FILE = Join-Path $env:GITHUB_WORKSPACE "email-body.txt"
+
+          @"
+Hello,
+
+The ESET Account and Key Generator has completed.
+
+Repository: ${{ github.repository }}
+Workflow: ${{ github.workflow }}
+Run: #${{ github.run_number }}
+Operating System: $env:RUNNER_OS
+
+==================================================
+GENERATED OUTPUT
+==================================================
+
+"@ | Out-File -FilePath $EMAIL_FILE -Encoding utf8
+
           if ($ACCOUNT -ne 0) {
-            python main.py --auto-detect-browser --account --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $ACCOUNT
-            echo "Account:" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-            Get-Content -Path ./*ACCOUNTS.txt -ErrorAction SilentlyContinue | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            python main.py `
+              --auto-detect-browser `
+              --account `
+              --email-api "$MAIL" `
+              --skip-update-check `
+              --no-logo `
+              --disable-progress-bar `
+              --disable-logging `
+              --repeat $ACCOUNT
+
+            "Account:" | Out-File -FilePath $EMAIL_FILE -Append -Encoding utf8
+
+            Get-Content -Path ./*ACCOUNTS.txt `
+              -ErrorAction SilentlyContinue |
+              Out-File -FilePath $EMAIL_FILE -Append -Encoding utf8
+
+            "" | Out-File -FilePath $EMAIL_FILE -Append -Encoding utf8
           }
 
           if ($KEY -ne 0) {
-            python main.py --auto-detect-browser "$KEY_TYPE" --email-api "$MAIL" --skip-update-check --no-logo --disable-progress-bar --disable-logging --repeat $KEY
-            echo "`nKey:" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-            Get-Content -Path ./*KEYS.txt -ErrorAction SilentlyContinue | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            python main.py `
+              --auto-detect-browser `
+              "$KEY_TYPE" `
+              --email-api "$MAIL" `
+              --skip-update-check `
+              --no-logo `
+              --disable-progress-bar `
+              --disable-logging `
+              --repeat $KEY
+
+            "Key:" | Out-File -FilePath $EMAIL_FILE -Append -Encoding utf8
+
+            Get-Content -Path ./*KEYS.txt `
+              -ErrorAction SilentlyContinue |
+              Out-File -FilePath $EMAIL_FILE -Append -Encoding utf8
+
+            "" | Out-File -FilePath $EMAIL_FILE -Append -Encoding utf8
           }
+
+          @"
+==================================================
+
+GitHub Actions run:
+https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+This email was automatically generated by GitHub Actions.
+"@ | Out-File -FilePath $EMAIL_FILE -Append -Encoding utf8
+
+
+      # =========================================================
+      # SEND EMAIL
+      # =========================================================
+      - name: Send Summary by Email
+        if: always()
+        uses: dawidd6/action-send-mail@v6
+        with:
+          # Gmail SMTP
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+
+          # GitHub Secrets
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+
+          # Sender / Recipient
+          from: GitHub Actions <${{ secrets.GMAIL_USERNAME }}>
+          to: ${{ secrets.EMAIL_TO }}
+
+          # Email subject
+          subject: "ESET KeyGen - Generated Account/Key"
+
+          # Use the generated text file as the email body
+          body: file://${{ github.workspace }}/email-body.txt
